@@ -5,6 +5,7 @@
 #include <signal.h>
 
 #include "tcpserver.h"
+#include "btlib.h"
 #include "util.h"
 
 static TServer server;
@@ -19,7 +20,9 @@ int main(int argc, char **argv) {
 
 	signal(SIGPIPE, _sig_handler);
 
-	server_init(&server, atoi(argv[1]));
+	bt_test();
+
+	/*server_init(&server, atoi(argv[1]));
 	server_start(&server);
 
 	fprintf(stderr, "Starting sender\n");
@@ -28,7 +31,7 @@ int main(int argc, char **argv) {
 
 		fprintf(stderr, "Sending msg\n");
 		server_send_msg(&server, "HELLO");
-	}
+	}*/
 
 	return EXIT_SUCCESS;
 }

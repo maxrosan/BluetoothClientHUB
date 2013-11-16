@@ -1,11 +1,11 @@
 
 
-SOURCES=tcpserver.c btserver.c
+SOURCES=tcpserver.c btlib.c btserver.c
 OBJECTS=$(SOURCES:.c=.o)
 EXECUTABLE=btserver
 
 CFLAGS=-O2
-LIBS=-lpthread
+LIBS=-lpthread -lbluetooth
 
 all: $(SOURCES) $(EXECUTABLE)
 
