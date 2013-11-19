@@ -2,6 +2,8 @@
 #include <assert.h>
 #include "msg.h"
 
+static const char msg_magic_number[] = {'b', 't', 'h', 'b'};
+
 Message* msg_create(int proto_from, int from, int proto_to, int to, char *msg) {
 
 	Message *res;
@@ -27,6 +29,9 @@ void msg_serialize(Message *msg, char** res, int *len) {
 	assert(msg != NULL && res != NULL && *res != NULL && len != NULL);
 
 	pt = *res;
+
+	memcpy(pt, msg_magic_number, 4);
+	pt = pt + 4;
 
 	memcpy(pt, (char*) &msg->from_proto, sizeof(msg->from_proto));
 	pt = pt + sizeof(msg->from_proto);
