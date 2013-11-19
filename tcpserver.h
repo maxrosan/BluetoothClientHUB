@@ -5,16 +5,21 @@
 #include <sys/poll.h>
 #include <pthread.h>
 #include <errno.h>
+#include <stdlib.h>
+#include <stdio.h>
 
-#define MAX_QUEUE 1024
+#include "queue.h"
+#include "msg.h"
+
 #define MAX_CLIENTS 20
+#define TCP_MAX_BUFF_LEN 1024
 
 typedef struct _Server {
 
 	int sock;
 	int running;
 
-	struct pollfd fds[1];
+	struct pollfd fds[1 + MAX_CLIENTS];
 	int nfds;
 
 	pthread_t thread;
@@ -30,19 +35,14 @@ typedef struct _Client {
 	int sock;
 	int running;
 
-	char* queue[MAX_QUEUE];
-	int   queue_front;
-	int   queue_rear;
-	int   queue_size;
+	Queue *queue;
 
 	pthread_t thread;
-	pthread_mutex_t lock;
-	pthread_cond_t  cond;
 
 } TClient;
 
  int server_init(TServer *server, int port);
  void server_start(TServer *server);
- void server_send_msg(TServer *server, char *msg);
+ void server_send_msg(TServer *server, Message *msg);
 
  #endif

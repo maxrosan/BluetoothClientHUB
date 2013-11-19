@@ -4,21 +4,14 @@
 
 #include <unistd.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <memory.h>
-
-enum ProtocolEnum {
-	PROTO_ALL,
-	PROTO_BT,
-	PROTO_IP,
-	__MAX_PROTO_NUM
-};
 
 typedef struct _Message {
 
-	int from_proto;
-	int from_fd;
+	enum type { MESSAGE, SIG_QUIT };
 
-	int to_proto;
+	int from_fd;
 	int to_fd;
 
 	char *msg;
@@ -28,6 +21,8 @@ typedef struct _Message {
 
 Message* msg_create(int proto_from, int from, int proto_to, int to, char *msg);
 void msg_serialize(Message *msg, char** res, int *len);
+Message* msg_deserialized(char *buff);
+void msg_free(Message *msg);
 void msg_destroy(Message *msg);
 
 #endif

@@ -13,13 +13,13 @@ Queue* queue_create(void) {
 		pthread_mutex_init(&q->lock, NULL);
 		pthread_cond_init(&q->cond, NULL);
 
-		memset(q->queue, 0, sizeof(char*) * MAX_SIZE_QUEUE);
+		memset(q->queue, 0, sizeof(void*) * MAX_SIZE_QUEUE);
 	}
 
 	return q;
 }
 
-int queue_push(Queue *q, const char *str)  {
+int queue_push(Queue *q, const void *str)  {
 
 	int res = FALSE, newpos;
 
@@ -28,7 +28,7 @@ int queue_push(Queue *q, const char *str)  {
 	pthread_mutex_lock(&q->lock);
 
 	if (q->size < MAX_SIZE_QUEUE) {
-		q->queue[q->front] = strdup(str);
+		q->queue[q->front] = str;
 		q->front = (q->front + 1) % MAX_SIZE_QUEUE;
 		q->size++;
 		
@@ -44,9 +44,9 @@ int queue_push(Queue *q, const char *str)  {
 	return res;
 }
 
-char* queue_pop(Queue *q) {
+void* queue_pop(Queue *q) {
 
-	char *res = NULL;
+	void *res = NULL;
 
 	pthread_mutex_lock(&q->lock);
 
@@ -62,12 +62,6 @@ char* queue_pop(Queue *q) {
 
 	pthread_mutex_unlock(&q->lock);
 
-}
-
-void queue_release(char *obj) {
-	if (obj) {
-		free(obj);
-	}
 }
 
 void queue_destroy(Queue *q) {

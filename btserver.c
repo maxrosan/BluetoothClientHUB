@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 
 	signal(SIGPIPE, _sig_handler);
 
-	bt_test();
+	//bt_test();
 
 	/*server_init(&server, atoi(argv[1]));
 	server_start(&server);

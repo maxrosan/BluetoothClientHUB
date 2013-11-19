@@ -13,6 +13,7 @@
 
 #include "tcpserver.h"
 #include "util.h"
+#include "msg.h"
 
  int server_init(TServer *server, int port) {
 
@@ -51,70 +52,14 @@
 	return TRUE;
  }
 
- int _client_queue_push(TClient *client, char *str) {
-
- 	assert(client != NULL);
- 	assert(str != NULL);
-
- 	if (((client->queue_front + 1) % MAX_QUEUE) != (client->queue_rear)) {
-
- 		client->queue[client->queue_front] = strdup(str);
- 		client->queue_front = (client->queue_front + 1) % MAX_QUEUE;
-
- 		fprintf(stderr, "Message to %d pushed\n", client->sock);
-
- 		return TRUE;
- 	} else {
-		fprintf(stderr, "Message to %d not pushed\n", client->sock); 		
- 	}
-
- 	return FALSE;
- }
-
- static int _client_queue_empty(TClient *client) {
-
- 	assert(client != NULL);
-
- 	return (client->queue_rear == client->queue_front);
-
- }
-
  static int _client_send_msg(TClient *client, char *msg) {
 
- 	int res, sendsig;
- 	printf("Sending [%s] to %d\n", msg, client->sock);
+ 	int res;
+ 	printf("Sending msg to %d\n", client->sock);
 
- 	pthread_mutex_lock(&client->lock);
- 	sendsig = _client_queue_empty(client);
- 	res = _client_queue_push(client, msg);
-
- 	if (res && sendsig) {
- 		pthread_cond_signal(&client->cond);
- 	}
-
- 	pthread_mutex_unlock(&client->lock);
+ 	res = queue_push(client->queue, msg);
 
  	return res;
- }
-
- static char* _client_queue_pop(TClient *client) {
-
- 	assert(client != NULL);
-
- 	if (client->queue_rear == client->queue_front) {
- 		return NULL;
- 	} else {
-
- 		char *front = client->queue[client->queue_rear];
- 		char *res = strdup(front);
-
- 		client->queue[client->queue_rear] = NULL;
- 		client->queue_rear = (client->queue_rear + 1) % MAX_QUEUE;
-
- 		free(front);
-
- 		return res;
- 	}
  }
 
  static void* _client_run(void *arg) {
@@ -132,32 +77,22 @@
 
  		fprintf(stderr, "Client %d: waiting message\n", client->sock);
 
- 		pthread_mutex_lock(&client->lock);
+ 		if (front = queue_pop(client->queue)) {
 
- 		if (_client_queue_empty(client)) {
- 			pthread_cond_wait(&client->cond, &client->lock);
- 		}
-
-
- 		front = _client_queue_pop(client);
-
- 		if (strcmp("QUIT", front) == 0) {
- 			client->running = FALSE;
- 		} else {
- 			int try_write;
-
- 			do {
- 				try_write =  write(client->sock, front, strlen(front) + 1);
- 			} while (try_write < 0 && errno == EAGAIN);
-
- 			if (try_write == -1) {
+	 		if (strcmp("QUIT", front) == 0) {
  				client->running = FALSE;
+ 			} else {
+ 				int try_write;
+
+ 				do {
+ 					try_write =  write(client->sock, front, strlen(front) + 1);
+ 				} while (try_write < 0 && errno == EAGAIN);
+
+ 				if (try_write == -1) {
+ 					client->running = FALSE;
+ 				}
  			}
  		}
-
- 		free(front);
-
- 		pthread_mutex_unlock(&client->lock);
 
  	}
 
@@ -171,13 +106,8 @@
 	if (client != NULL) {
 		client->sock = sock;
 		client->running = FALSE;
-		client->queue_front = 0;
-		client->queue_rear  = 0;
-	
-		memset(client->queue, 0, sizeof(char*) * MAX_QUEUE);
 
-		pthread_mutex_init(&client->lock, NULL);
- 		pthread_cond_init(&client->cond, NULL);
+		client->queue = queue_create();
 
 		pthread_create(&client->thread, NULL, _client_run, client);
 
@@ -188,8 +118,7 @@
 
  static void _client_destroy(TClient *client) {
 
- 	pthread_cond_destroy(&client->cond);
- 	pthread_mutex_destroy(&client->lock);
+ 	queue_destroy(client->queue);
 
 	free(client);
  }
@@ -289,21 +218,34 @@
 
  }
 
- void server_send_msg(TServer *server, char *msg) {
+ void server_send_msg(TServer *server, Message *msg) {
 
  	int i;
+ 	char buff[TCP_MAX_BUFF_LEN];
+ 	int bufflen;
 
  	assert(server != NULL && msg != NULL);
+
+ 	if (msg_size_serialized(msg) > TCP_MAX_BUFF_LEN) {
+ 		fprintf(stderr, "Message has invalid size\n");
+ 		return;
+ 	}
+
+ 	msg_serialize(msg, (char**) &buff, &bufflen);
 
  	fprintf(stderr, "Waiting to send message to all %d clients\n", server->n_clients);
  	pthread_mutex_lock(&server->lock);
 
  	for (i = 0; i < MAX_CLIENTS; i++) {
- 		if (server->clients[i] != NULL) {
+ 		if (server->clients[i] != NULL && 
+ 			(msg->to_proto == PROTO_ALL || 
+ 				msg->to_proto == PROTO_IP && 
+ 				 (msg->to_fd == 0 || msg->to_fd == server->clients[i]->sock)
+ 			)) {
 
  			fprintf(stderr, "Sending message to %d\n", i);
 
- 			_client_send_msg(server->clients[i], msg);
+ 			//_client_send_msg(server->clients[i], buff);
  		}
  	}
 

@@ -13,7 +13,7 @@
 
 typedef struct _Queue {
 
-	char* queue[MAX_SIZE_QUEUE];
+	void* queue[MAX_SIZE_QUEUE];
 	int   front;
 	int   rear;
 	int   size;
@@ -24,9 +24,8 @@ typedef struct _Queue {
 } Queue;
 
 Queue* queue_create(void);
-int queue_push(Queue *q, const char *str);
-char* queue_pop(Queue *q);
-void queue_release(char *obj);
+int queue_push(Queue *q, const void *val);
+void* queue_pop(Queue *q);
 void queue_destroy(Queue *q);
 
 #endif
