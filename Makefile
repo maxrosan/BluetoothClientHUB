@@ -1,6 +1,6 @@
 
 
-SOURCES=tcpserver.c btlib.c btserver.c
+SOURCES=msg.c queue.c tcpserver.c btlib.c btserver.c
 OBJECTS=$(SOURCES:.c=.o)
 EXECUTABLE=btserver
 
