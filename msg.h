@@ -9,20 +9,21 @@
 
 typedef struct _Message {
 
-	enum type { MESSAGE, SIG_QUIT };
+	enum { MESSAGE, SIG_QUIT } type;
 
-	int from_fd;
-	int to_fd;
+	int from;
+	int to;
 
 	char *msg;
-	int  size;
 
 } Message;
 
-Message* msg_create(int proto_from, int from, int proto_to, int to, char *msg);
-void msg_serialize(Message *msg, char** res, int *len);
-Message* msg_deserialized(char *buff);
-void msg_free(Message *msg);
+Message* msg_create(int from, int to, char *msg);
+Message* msg_copy(Message *msg);
+Message* msg_create_without_msg(int from, int to);
+char *msg_to_json(Message *msg);
+Message* msg_from_json(int from, const char *msg);
+Message* msg_get_quit_msg();
 void msg_destroy(Message *msg);
 
 #endif

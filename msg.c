@@ -1,133 +1,135 @@
 
 #include <assert.h>
+#include <json-glib/json-glib.h>
+#include <json-glib/json-gobject.h>
+
 #include "msg.h"
+#include "util.h"
 
-static const char msg_magic_number[] = {'b', 't', 'h', 'b'};
-
-Message* msg_create(int proto_from, int from, int proto_to, int to, char *msg) {
+Message* msg_create(int from, int to, char *msg) {
 
 	Message *res;
 
 	res = (Message*) malloc(sizeof(Message));
 
-	res->from_proto = proto_from;
-	res->from_fd    = from;
-
-	res->to_fd    = to;
-	res->to_proto = proto_to;
-
-	res->msg     = strdup(msg);
-	res->size    = strlen(msg);
+	res->type = MESSAGE;
+	res->from = from;
+	res->to   = to;
+	res->msg  = strdup(msg);
 
 	return res;
 
 }
 
-int msg_size_serialized(Message *msg) {
+Message* msg_create_without_msg(int from, int to) {
 
-	assert(msg != NULL);
+	Message *res;
 
-	int pt = 0;
+	res = (Message*) malloc(sizeof(Message));
 
-	//memcpy(pt, msg_magic_number, sizeof msg_magic_number);
-	pt = pt + (sizeof msg_magic_number);
+	res->type = MESSAGE;
+	res->from = from;
+	res->to   = to;
+	res->msg  = NULL;
 
-	//memcpy(pt, (char*) &msg->from_proto, sizeof(msg->from_proto));
-	pt = pt + sizeof(msg->from_proto);
-	
-	//memcpy(pt, (char*) &msg->from_fd, sizeof(msg->from_fd));
-	pt = pt + sizeof(msg->from_fd);
+	return res;
 
-	//memcpy(pt, (char*) &msg->to_proto, sizeof(msg->to_proto));
-	pt = pt + sizeof(msg->to_proto);	
-
-	//memcpy(pt, (char*) &msg->to_fd, sizeof(msg->to_fd));
-	pt = pt + sizeof(msg->to_fd);
-
-	//memcpy(pt, (char*) &msg->size, sizeof(msg->size));
-	pt = pt + sizeof(msg->size);
-
-	//memcpy(pt, msg->msg, msg->size);
-	pt = pt + msg->size;
-
-	return pt;
 }
 
-void msg_serialize(Message *msg, char** res, int *len) {
-	char *pt;
+Message* msg_copy(Message *msg) {
 
-	assert(msg != NULL && res != NULL && *res != NULL && len != NULL);
+	Message *res;
 
-	pt = *res;
+	res = (Message*) malloc(sizeof(Message));
 
-	memcpy(pt, msg_magic_number, sizeof msg_magic_number);
-	pt = pt + (sizeof msg_magic_number);
+	res->type = msg->type;
+	res->from = msg->from;
+	res->to   = msg->to;
+	res->msg  = strdup(msg->msg);
 
-	memcpy(pt, (char*) &msg->from_proto, sizeof(msg->from_proto));
-	pt = pt + sizeof(msg->from_proto);
-	
-	memcpy(pt, (char*) &msg->from_fd, sizeof(msg->from_fd));
-	pt = pt + sizeof(msg->from_fd);
-
-	memcpy(pt, (char*) &msg->to_proto, sizeof(msg->to_proto));
-	pt = pt + sizeof(msg->to_proto);	
-
-	memcpy(pt, (char*) &msg->to_fd, sizeof(msg->to_fd));
-	pt = pt + sizeof(msg->to_fd);
-
-	memcpy(pt, (char*) &msg->size, sizeof(msg->size));
-	pt = pt + sizeof(msg->size);
-
-	memcpy(pt, msg->msg, msg->size);
-	pt = pt + msg->size;
-
-	*len = (pt - *res);
+	return res;
 }
 
-Message* msg_deserialized(char *buff) {
+Message* msg_from_json(int from, const char *msgtxt) {
 
-	char *pt;
-	char msg_magic_number_tmp[sizeof msg_magic_number];
-	Message *msg = NULL;
+	Message *ret;
+	int to;
+	const char *txt;
+	JsonParser *parser;
+	JsonReader *reader;
+	char *cpy;
 
-	assert(buff);
+	parser = json_parser_new();
+	json_parser_load_from_data(parser, msgtxt, -1, NULL);
 
-	pt = buff;
+	reader = json_reader_new(json_parser_get_root(parser));
 
-	memcpy(msg_magic_number_tmp, pt, sizeof msg_magic_number);
-	pt = pt + (sizeof msg_magic_number);
+	json_reader_read_member(reader, "to");
+	to = json_reader_get_int_value(reader);
+	json_reader_end_member(reader);
 
-	if (memcmp(msg_magic_number_tmp, msg_magic_number, sizeof msg_magic_number) != 0) {
-		fprintf(stderr, "Invalid magic number\n");
-		return NULL;
+	json_reader_read_member(reader, "txt");
+	txt = json_reader_get_string_value(reader);
+	json_reader_end_member(reader);	
+
+	cpy = strdup(txt);
+
+	g_object_unref(reader);
+	g_object_unref(parser);
+
+	ret = msg_create_without_msg(from, to);
+	ret->msg = cpy;
+
+	return ret;
+}
+
+char *msg_to_json(Message *msg) {
+
+	JsonBuilder *builder;
+	JsonGenerator *gen;
+	JsonNode *node;
+	char *ret;
+
+	builder = json_builder_new();
+
+	json_builder_begin_object(builder);
+
+	json_builder_set_member_name(builder, "to");
+	json_builder_add_int_value(builder, msg->to);
+
+	json_builder_set_member_name(builder, "from");
+	json_builder_add_int_value(builder, msg->from);
+
+	json_builder_set_member_name(builder, "txt");
+	json_builder_add_string_value(builder, msg->msg);
+
+	json_builder_end_object(builder);
+
+	gen = json_generator_new();
+	node = json_builder_get_root(builder);
+	json_generator_set_root(gen, node);
+
+	ret = (char*) json_generator_to_data(gen, NULL);
+
+	DEBUG("msg [%d %d %s]", msg->from, msg->to, msg->msg);
+	DEBUG("ret = %s", ret);
+
+	json_node_free(node);
+	g_object_unref(gen);
+	g_object_unref(builder);
+
+	return ret;
+}
+
+Message* msg_get_quit_msg() {
+	static Message* msg = NULL;
+
+	if (msg == NULL) {
+		msg = msg_create(-1, -1, "QUIT");
+		msg->type = SIG_QUIT;
 	}
-
-	msg = (Message *) malloc(sizeof(Message));
-
-	memcpy((char*) &msg->from_proto, pt, sizeof(msg->from_proto));
-	pt = pt + sizeof(msg->from_proto);
-	
-	memcpy((char*) &msg->from_fd, pt, sizeof(msg->from_fd));
-	pt = pt + sizeof(msg->from_fd);
-
-	memcpy((char*) &msg->to_proto, pt, sizeof(msg->to_proto));
-	pt = pt + sizeof(msg->to_proto);	
-
-	memcpy((char*) &msg->to_fd, pt, sizeof(msg->to_fd));
-	pt = pt + sizeof(msg->to_fd);
-
-	memcpy((char*) &msg->size, pt, sizeof(msg->size));
-	pt = pt + sizeof(msg->size);
-
-	memcpy(msg->msg, pt, msg->size);
 
 	return msg;
-}
-
-void msg_free(Message *msg) {
-	if (msg) {
-		free(msg);
-	}
 }
 
 void msg_destroy(Message *msg) {

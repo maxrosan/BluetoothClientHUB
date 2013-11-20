@@ -24,7 +24,7 @@ typedef struct _Queue {
 } Queue;
 
 Queue* queue_create(void);
-int queue_push(Queue *q, const void *val);
+int queue_push(Queue *q, void *val);
 void* queue_pop(Queue *q);
 void queue_destroy(Queue *q);
 

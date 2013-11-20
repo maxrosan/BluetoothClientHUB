@@ -19,7 +19,7 @@ Queue* queue_create(void) {
 	return q;
 }
 
-int queue_push(Queue *q, const void *str)  {
+int queue_push(Queue *q, void *str)  {
 
 	int res = FALSE, newpos;
 
@@ -35,6 +35,8 @@ int queue_push(Queue *q, const void *str)  {
 		if (q->size == 1) {
 			pthread_cond_broadcast(&q->cond);
 		}
+
+		DEBUG("pushing 0x%x", str);
 
 		res = TRUE;
 	}
@@ -58,10 +60,13 @@ void* queue_pop(Queue *q) {
 		res = q->queue[q->rear];
 		q->rear = (q->rear + 1) % MAX_SIZE_QUEUE;
 		q->size--;
+
+		DEBUG("pop 0x%x", res);
 	}
 
 	pthread_mutex_unlock(&q->lock);
 
+	return res;
 }
 
 void queue_destroy(Queue *q) {

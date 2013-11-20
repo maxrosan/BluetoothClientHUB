@@ -5,20 +5,28 @@
 #include <signal.h>
 
 #include "tcpserver.h"
-#include "btlib.h"
 #include "util.h"
+#include "listener.h"
 
-static TServer server;
+static Listener listener;
 
 static void _sig_handler(int sig) {
 
-	fprintf(stderr, "Signal %d caught\n", sig);
+	DEBUG("Signal %d caught", sig);
 
+	if (sig == SIGINT) {
+		listener_close(&listener);
+	}
 }
 
 int main(int argc, char **argv) {
 
 	signal(SIGPIPE, _sig_handler);
+	signal(SIGINT, _sig_handler);
+
+	listener_init(&listener);
+	tcpserver_init(&listener, atoi(argv[1]));
+	listener_run(&listener);
 
 	//bt_test();
 

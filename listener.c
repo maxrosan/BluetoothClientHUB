@@ -2,15 +2,18 @@
 
 #include "listener.h"
 #include "util.h"
+#include "msg.h"
 
-#include <unistd.h>
-#include <assert.h>
+#include <json-glib/json-glib.h>
+#include <json-glib/json-gobject.h>
 
 void listener_init(Listener *sl) {
 
 	int i;
 
 	assert(sl != NULL);
+
+	g_type_init();
 
 	sl->running   = FALSE;
 
@@ -24,21 +27,30 @@ void listener_init(Listener *sl) {
 		sl->clients[i] = NULL;
 	}
 
+	pthread_mutex_init(&sl->clients_lock, NULL);
+
+	sl->queue = queue_create();
+
 }
 
-void listener_add(Listener *sl, int sock) {
+int listener_add(Listener *sl, int sock) {
 
 	int i;
+
+	pthread_mutex_lock(&sl->clients_lock);
 
 	for (i = 0; i < LISTENER_MAX_SERVERS; i++) {
 		if (sl->pf[i].fd == -1) {
 
 			sl->pf[i].fd = sock;
 			sl->pf[i].events = POLLIN;
+			sl->npfs++;
 
 			i = LISTENER_MAX_SERVERS + 1;
 		}
 	}
+
+	pthread_mutex_unlock(&sl->clients_lock);
 
 	return (i == (LISTENER_MAX_SERVERS + 1));
 
@@ -47,49 +59,110 @@ void listener_add(Listener *sl, int sock) {
 static void* _client_thread_write(void *arg) {
 
 	int bytes_write;
-	char buf[1024];
+	Message *front;
+	char *txt;
 
 	ClientListener *cl = (ClientListener*) arg;
 
-	while (cl->running) {
+	while (cl->running_write) {
 		// read from in_queue
 		// write socket
+
+		DEBUG("Client %d waiting queue", cl->fd);
+
+		front = (Message*) queue_pop(cl->in_queue);
+
+		DEBUG("Client %d: queue front = 0x%x", cl->fd, front);
+
+		if (front != NULL) {
+
+			if (front->type == SIG_QUIT) {
+				cl->running_write = FALSE;
+
+				DEBUG("Client %d: writing thread quitting", cl->fd);
+			} else {
+
+				DEBUG("Client %d received [%d %d %s]", cl->fd, front->from, front->to, front->msg);
+
+				txt = msg_to_json(front);
+
+				do {
+					bytes_write = write(cl->fd, txt, strlen(txt));
+				} while (bytes_write == -1 && errno == EAGAIN);
+
+				free(txt);
+				msg_destroy(front);
+
+				if (bytes_write == -1) {
+					cl->running_write = FALSE;
+				} 
+			}
+
+		}
 	}
 }
 
 static void* _client_thread_read(void *arg) {
 	int bytes_read;
 	char buf[1024];
+	struct pollfd pr;
 
 	ClientListener *cl = (ClientListener*) arg;
 
-	while (cl->running) {
+	pr.fd = cl->fd;
+	pr.events = POLLIN;
 
-		do { 
-			bytes_read = read(client, buf, sizeof buf);
-		} while (bytes_read == -1 && errno == EAGAIN);
-		
-		// put it into out_queue
+	while (cl->running_read) {
 
-		if (bytes_read == -1) {
-			cl->running = FALSE;
+		DEBUG("Client %d waiting message", cl->fd);
+
+		poll(&pr, 1, 3 * 1000);
+
+		if (pr.revents == POLLIN) {
+
+			do { 
+				bytes_read = read(cl->fd, buf, sizeof buf);
+			} while (bytes_read == -1 && errno == EAGAIN);
+
+			DEBUG("Client %d sent [%d]", cl->fd, bytes_read);
+
+			if (bytes_read <= 0) {
+				cl->running_read = FALSE;
+
+				DEBUG("Client %d: reading thread quitting", cl->fd);
+			} else {
+				buf[bytes_read] = 0;
+				if (bytes_read > 0) {
+
+					Message *msgObj = msg_from_json(cl->fd, buf);
+
+					DEBUG("Client %d push [%d %d %s]", cl->fd, msgObj->from, msgObj->to, msgObj->msg);
+
+					queue_push(cl->out_queue, (void*) msgObj);
+				}
+			}
+
+		} else if (pr.revents != 0) {
+			cl->running_read = FALSE;
 		}
 	}
 
 	return NULL;
 }
 
-static ClientListener* void _client_init(int fd, void *id, Queue *out_queue, int fd_server) {
+static ClientListener* _client_init(int fd, Queue *out_queue, int fd_server) {
 
 	ClientListener *ret = NULL;
 
 	if (ret = (ClientListener*) malloc(sizeof(ClientListener))) {
-		ret->id = id;
+
 		ret->in_queue = queue_create();
 		ret->out_queue = out_queue;
 		ret->fd = fd;
 		ret->fd_server = fd_server;
-		ret->running = TRUE;
+
+		ret->running_write = TRUE;
+		ret->running_read  = TRUE;
 
 		pthread_create(&ret->read_thread, NULL, _client_thread_read, (void*) ret);
 		pthread_create(&ret->write_thread, NULL, _client_thread_write, (void*) ret);
@@ -98,25 +171,160 @@ static ClientListener* void _client_init(int fd, void *id, Queue *out_queue, int
 	return ret;
 }
 
+static void _client_stop(ClientListener *cl) {
+
+	cl->running_read  = FALSE;
+	cl->running_write = FALSE;
+
+	DEBUG("Stopping %d", cl->fd);
+
+	close(cl->fd);
+
+	while (!queue_push(cl->in_queue, (void*) msg_get_quit_msg())) {
+		DEBUG("Waiting %d to quit", cl->fd);
+		sleep(3);
+	}
+
+	DEBUG("CL %d: waiting read thread", cl->fd);
+	pthread_join(cl->read_thread, NULL);
+
+	DEBUG("CL %d: waiting write thread", cl->fd);
+	pthread_join(cl->write_thread, NULL);
+
+	DEBUG("Client %d down", cl->fd);
+}
+
+void listener_close(Listener *l) {
+	int i, size;
+
+	DEBUG("Closing all servers [%d]", l->npfs);
+
+	size = l->npfs;
+	for (i = 0; i < size; i++) {
+		close(l->pf[i].fd);
+	}
+
+	queue_push(l->queue, (void*) msg_get_quit_msg());
+
+	DEBUG("Waiting msg processor");
+	pthread_join(l->msg_processor, NULL);
+	DEBUG("Msg processor ok");
+
+}
+
+static void* __msg_processor(void *arg) {
+
+	Listener *l = (Listener*) arg;
+	Message *front, *cpy;
+	int running = TRUE;
+	int i;
+
+	DEBUG("Initializing msg processor");
+
+	while (l->running && running) {
+
+		front = queue_pop(l->queue);
+
+		if (front != NULL && front->type == SIG_QUIT) {
+			running = FALSE;
+		} else if (front != NULL) {
+
+			DEBUG("PMSG: [%d %d %s]", front->from, front->to, front->msg);
+
+			pthread_mutex_lock(&l->clients_lock);
+			for (i = 0; i < LISTENER_MAX_CLIENTS; i++) {
+				if (l->clients[i] != NULL && 
+					(l->clients[i]->fd == front->to || l->clients[i]->fd == 0)) {
+					queue_push(l->clients[i]->in_queue, msg_copy(front));
+				}
+			}
+			pthread_mutex_unlock(&l->clients_lock);
+
+			msg_destroy(front);
+		}
+	}
+
+	DEBUG("Msg processor stopped");
+
+	return NULL;
+}
+
 void listener_run(Listener *sl) {
 
-	int size, i, j;
+	int size, i, j, client;
 
 	sl->running = TRUE;
 
+	pthread_create(&sl->msg_processor, NULL, __msg_processor, (void*) sl);
+
 	while (sl->running) {
 
- 		fprintf(stderr, "Listener: Waiting events...\n");
- 		poll(sl->pf, server->npfs, 3 * 1000);
+ 		DEBUG("Listener: Waiting events...");
+ 		poll(sl->pf, sl->npfs, 3 * 1000);
 
  		size = sl->npfs;
+
  		for (i = 0; i < size; i++) {
  			if (sl->pf[i].revents != 0) {
- 				if (sl->pfs[i].revents != POLLIN) {
- 					//sl->pfs[i].fd = -1;
+ 				if (sl->pf[i].revents != POLLIN) {
+
+ 					DEBUG("Server %d down", sl->pf[i].fd);
+
+ 					pthread_mutex_lock(&sl->clients_lock);
+
+ 					for (j = 0; j < LISTENER_MAX_CLIENTS; j++) {
+ 						if (sl->clients[j] != NULL && sl->clients[j]->fd_server == sl->pf[i].fd) {
+ 							
+ 							_client_stop(sl->clients[j]);
+ 							
+ 							free(sl->clients[j]);
+
+ 							sl->clients[j] = NULL;
+ 						}
+ 					}
+
+ 					sl->pf[i].fd = -1;
+ 					sl->npfs--;
+
+ 					pthread_mutex_unlock(&sl->clients_lock);
+
  				} else {
- 					client = accept(sl->pfs[i].fd, NULL, NULL);
+ 					j = 0;
+ 					client = accept(sl->pf[i].fd, NULL, NULL);
+
+ 					DEBUG("Receiving client %d", client);
+
+ 					if (client < 0) {
+ 						perror("client");
+ 						j = LISTENER_MAX_CLIENTS + 1;
+ 					}
+
+ 					pthread_mutex_lock(&sl->clients_lock);
+
+ 					for (; j < LISTENER_MAX_CLIENTS; j++) {
+ 						if (sl->clients[j] == NULL) {
+
+ 							sl->clients[j] = _client_init(client, sl->queue, sl->pf[i].fd);
+
+ 							j = LISTENER_MAX_CLIENTS + 1;
+ 						}
+ 					}
+
+ 					pthread_mutex_unlock(&sl->clients_lock);
  				} 
+ 			}
+ 		}
+
+ 		if (size == 0) {
+ 			sl->running = FALSE;
+ 		}
+
+ 		for (j = 0; j < LISTENER_MAX_CLIENTS; j++) {
+ 			if (sl->clients[j] != NULL && 
+ 				(!sl->clients[j]->running_read || !sl->clients[j]->running_write)) {
+ 				_client_stop(sl->clients[j]);
+ 				free(sl->clients[j]);
+ 				sl->clients[j] = NULL;
  			}
  		}
 
