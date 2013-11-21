@@ -234,7 +234,7 @@ static void* __msg_processor(void *arg) {
 			pthread_mutex_lock(&l->clients_lock);
 			for (i = 0; i < LISTENER_MAX_CLIENTS; i++) {
 				if (l->clients[i] != NULL && 
-					(l->clients[i]->fd == front->to || l->clients[i]->fd == 0)) {
+					(l->clients[i]->fd == front->to || front->to == 0)) {
 					queue_push(l->clients[i]->in_queue, msg_copy(front));
 				}
 			}
