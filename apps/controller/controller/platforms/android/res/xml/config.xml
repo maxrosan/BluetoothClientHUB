@@ -16,6 +16,8 @@
     <preference name="fullscreen" value="true" />
     <preference name="webviewbounce" value="true" />
 
-    <plugin name="BluetoothClient" value="com.github.controller.BluetoothClient" />
+    <feature name="BluetoothClient">
+        <param name="android-package" value="com.github.controller.BluetoothClient" />
+    </feature>
 
 </widget>

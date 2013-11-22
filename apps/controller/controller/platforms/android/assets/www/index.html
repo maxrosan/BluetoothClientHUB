@@ -13,23 +13,48 @@
 </head>
 <body>
  
-<div data-role="page" data-theme="a" id="page-home">
-    <div data-role="header" data-nobackbtn="true" data-theme="e">
-    <h1>Audio Player</h1>
-    </div> <!-- /header -->
+<div data-role="page" id="page-home">
     
-    <div data-role="content" id="content-manual" data-theme="a">
-    
-        <div data-role="button" id="playaudio" data-theme="e" ontouchend="window.echo('hello')">Play</div>
-        <div data-role="button" id="pauseaudio" data-theme="e">Pause</div>
-        <div data-role="button" id="stopaudio" data-theme="e">Stop</div>    
-    
-        <div class="ui-grid-a">
-            <div class="ui-block-a"> Current: <span id="audio_position">0 sec</span></div>
-            <div class="ui-block-b">Total: <span id=media_dur>0</span> sec</div>
-        </div><!-- /grid-a -->
+  <div data-role="header"> <h1> Controller </h1> </div>
 
-    </div>  <!-- /content-manual -->
-</div>  <!-- /page -->
+  <div data-role="content">
+    
+    <div data-role="navbar">
+      <ul>
+        <li> <a href="index.html" class="ui-btn-active">Configuration</a> </li> 
+        <li> <a href="mouse.html">Mouse</a> </li>
+      </ul>
+    </div>
+
+  <br/><br/>
+
+  <form>
+
+    <ul data-role="listview" data-insert="true">
+      
+      <li data-role="fieldcontain">
+        <label for="name"> Devices: </label>
+        <select name="device" id="deviceId">
+          <option value="null"> Select a device: </option>
+        </select>
+      </li>
+
+      <li class="ui-body ui-body-b">
+        <fieldset class="ui-grid-a">
+          <div class="ui-block-a"> 
+            <div data-role="button" id="conectarId" ontouchend="selectDevice()">Conectar</div> 
+          </div>
+        </fieldset>
+      </li>
+
+    </ul>
+
+  </form> 
+
+  </div>
+
+</div>
+
+
 </body>
 </html>
