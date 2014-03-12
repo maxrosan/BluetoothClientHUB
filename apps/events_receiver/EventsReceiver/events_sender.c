@@ -13,6 +13,8 @@ EventsSender *events_sender_create(void) {
 
 	es->display = XOpenDisplay(NULL);
 
+	printf("display 0x%x", es->display);
+
 	return es;
 }
 

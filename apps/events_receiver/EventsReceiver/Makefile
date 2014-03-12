@@ -4,8 +4,11 @@ SOURCES=events_sender.c main.c client.c
 OBJECTS=$(SOURCES:.c=.o)
 EXECUTABLE=events
 
-CFLAGS=-ggdb
-LIBS=-lX11 -lXtst
+JSONGLIB_CFLAGS=`pkg-config --cflags json-glib-1.0`
+JSONGLIB_LIBS=`pkg-config --libs json-glib-1.0`
+
+CFLAGS=-ggdb $(JSONGLIB_CFLAGS)
+LIBS=-lX11 -lXtst $(JSONGLIB_LIBS)
 
 all: $(SOURCES) $(EXECUTABLE)
 
