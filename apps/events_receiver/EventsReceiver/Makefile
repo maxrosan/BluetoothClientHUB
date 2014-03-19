@@ -1,6 +1,6 @@
 
 
-SOURCES=events_sender.c main.c client.c
+SOURCES=events_sender.c client.c main.c
 OBJECTS=$(SOURCES:.c=.o)
 EXECUTABLE=events
 

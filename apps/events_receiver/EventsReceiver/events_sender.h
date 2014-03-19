@@ -7,6 +7,7 @@
 
 typedef struct _EventsSender {
     Display *display;
+    int positionMouseX,positionMouseY;
 } EventsSender;
 
 EventsSender *events_sender_create(void);

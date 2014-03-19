@@ -41,13 +41,6 @@ Client *client_init(const char *address, int port) {
 	return client;
 }
 
-typedef struct SMessage {
-
-	int from, to;
-	gdouble x, y, z;
-
-} Message;
-
 int _json_get_int_val(JsonReader *reader, const char *name) {
 	int retval;
 
@@ -70,20 +63,17 @@ gdouble _json_get_double_val(JsonReader *reader, const char *name) {
 
 inline static void _decode_internal_message(Message *msg, const char *txt) {
 
-	JsonParser *parser;
-	JsonReader *reader;
+	char *ptr = NULL;
 
-	parser = json_parser_new();
-	json_parser_load_from_data(parser, txt, -1, NULL);
+	ptr = strtok(txt, ";");
+	msg->x = atof(ptr);
 
-	reader = json_reader_new(json_parser_get_root(parser));
+	ptr = strtok(NULL, ";");
+	msg->y = atof(ptr);
 
-	msg->x = _json_get_double_val(reader, "x");
-	msg->y = _json_get_double_val(reader, "y");
-	msg->z = _json_get_double_val(reader, "z");
+	ptr = strtok(NULL, ";");
+	msg->z = atof(ptr);
 
-	g_object_unref(reader);
-	g_object_unref(parser);
 }
 
 inline static Message* _decode_message(char *msgtxt) {
@@ -126,7 +116,7 @@ void _free_msg(Message *msg) {
 	free(msg);
 }
 
-void client_main_loop(Client *cl) {
+void client_main_loop(Client *cl, void (*callback)(Message *msg)) {
 
 	assert(cl != NULL);
 
@@ -140,7 +130,7 @@ void client_main_loop(Client *cl) {
 	while (cl->running) {
 
 		poll(&pr, 1, 3 * 1000);
-		
+
 		if (pr.revents == POLLIN) {
 
 			do { 
@@ -149,9 +139,11 @@ void client_main_loop(Client *cl) {
 
 			if (bytes_read > 0) {
 
-				fprintf(stderr, "Msg: %s", cl->buffer);
+				fprintf(stderr, "Msg: %s\n", cl->buffer);
 
 				msg = _decode_message(cl->buffer);
+
+				callback(msg);
 
 				_free_msg(msg);
 			}

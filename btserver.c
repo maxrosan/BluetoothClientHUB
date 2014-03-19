@@ -5,8 +5,11 @@
 #include <signal.h>
 
 #include "tcpserver.h"
+#include "btlib.h"
 #include "util.h"
 #include "listener.h"
+
+#define BT_PORT 10
 
 static Listener listener;
 
@@ -25,7 +28,10 @@ int main(int argc, char **argv) {
 	signal(SIGINT, _sig_handler);
 
 	listener_init(&listener);
+
 	tcpserver_init(&listener, atoi(argv[1]));
+	//bt_server_init(&listener, BT_PORT);
+
 	listener_run(&listener);
 
 	//bt_test();

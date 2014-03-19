@@ -17,6 +17,13 @@
 #include <json-glib/json-glib.h>
 #include <json-glib/json-gobject.h>
 
+typedef struct SMessage {
+
+	int from, to;
+	float x, y, z;
+
+} Message;
+
 typedef struct _Client {
 
 	int sockfd;
@@ -27,6 +34,6 @@ typedef struct _Client {
 } Client;
 
 Client *client_init(const char *address, int port);
-void client_main_loop(Client *client);
+void client_main_loop(Client *client, void (*callback)(Message *msg));
 
 #endif
