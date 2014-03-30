@@ -12,6 +12,7 @@ typedef struct _EventsSender {
 
 EventsSender *events_sender_create(void);
 void events_sender_mouse_move(EventsSender*, int x, int y);
+void event_sender_keyboard_event(EventsSender *es, int key);
 void __events_sender_tester(void);
 #endif	/* EVENTS_SENDER_H */
 

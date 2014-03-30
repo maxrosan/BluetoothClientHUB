@@ -46,6 +46,10 @@ typedef struct _Listener {
 	int running;
 
 	struct pollfd pf[LISTENER_MAX_SERVERS];
+
+	void (*close_callback[LISTENER_MAX_SERVERS])(void*);
+	void *opaque[LISTENER_MAX_SERVERS];
+
 	int           npfs;
 
 	ClientListener *clients[LISTENER_MAX_CLIENTS];
@@ -63,5 +67,6 @@ void listener_init(Listener *sl);
 int listener_add(Listener *sl, int sock);
 void listener_run(Listener *sl);
 void listener_close(Listener *l);
+void listener_register_close_callback(Listener *l, int fd, void (*callback)(void*), void* argument);
 
 #endif

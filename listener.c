@@ -20,6 +20,8 @@ void listener_init(Listener *sl) {
 	sl->npfs = 0;
 	for (i = 0; i < LISTENER_MAX_SERVERS; i++) {
 		sl->pf[i].fd = -1;
+		sl->close_callback[i] = NULL;
+		sl->opaque[i] = NULL;
 	}
 
 	sl->n_clients = 0;
@@ -134,11 +136,14 @@ static void* _client_thread_read(void *arg) {
 				buf[bytes_read] = 0;
 				if (bytes_read > 0) {
 
+					//DEBUG("Raw message: %s", buf);
+
 					Message *msgObj = msg_from_json(cl->fd, buf);
 
-					DEBUG("Client %d push [%d %d %s]", cl->fd, msgObj->from, msgObj->to, msgObj->msg);
-
-					queue_push(cl->out_queue, (void*) msgObj);
+					if (msgObj != NULL) {
+						DEBUG("Client %d push %d/%d [%d %d %s]", cl->fd, cl->out_queue->size, MAX_SIZE_QUEUE, msgObj->from, msgObj->to, msgObj->msg);
+						queue_push(cl->out_queue, (void*) msgObj);
+					}
 				}
 			}
 
@@ -201,7 +206,7 @@ void listener_close(Listener *l) {
 
 	size = l->npfs;
 	for (i = 0; i < size; i++) {
-		close(l->pf[i].fd);
+		shutdown(l->pf[i].fd, 0);
 	}
 
 	queue_push(l->queue, (void*) msg_get_quit_msg());
@@ -249,6 +254,34 @@ static void* __msg_processor(void *arg) {
 	return NULL;
 }
 
+void _close_server(Listener *sl, int server_index) {
+
+	int j;
+
+	pthread_mutex_lock(&sl->clients_lock);
+
+	for (j = 0; j < LISTENER_MAX_CLIENTS; j++) {
+		if (sl->clients[j] != NULL && sl->clients[j]->fd_server == sl->pf[server_index].fd) {
+			
+			_client_stop(sl->clients[j]);
+			
+			free(sl->clients[j]);
+
+			sl->clients[j] = NULL;
+		}
+	}
+
+	sl->pf[server_index].fd = -1;
+	sl->npfs--;
+
+	if (sl->close_callback[server_index] != NULL) {
+		sl->close_callback[server_index](sl->opaque[server_index]);
+	}
+
+	pthread_mutex_unlock(&sl->clients_lock);	
+
+}
+
 void listener_run(Listener *sl) {
 
 	int size, i, j, client;
@@ -269,24 +302,7 @@ void listener_run(Listener *sl) {
  				if (sl->pf[i].revents != POLLIN) {
 
  					DEBUG("Server %d down", sl->pf[i].fd);
-
- 					pthread_mutex_lock(&sl->clients_lock);
-
- 					for (j = 0; j < LISTENER_MAX_CLIENTS; j++) {
- 						if (sl->clients[j] != NULL && sl->clients[j]->fd_server == sl->pf[i].fd) {
- 							
- 							_client_stop(sl->clients[j]);
- 							
- 							free(sl->clients[j]);
-
- 							sl->clients[j] = NULL;
- 						}
- 					}
-
- 					sl->pf[i].fd = -1;
- 					sl->npfs--;
-
- 					pthread_mutex_unlock(&sl->clients_lock);
+ 					_close_server(sl, i);
 
  				} else {
  					j = 0;
@@ -330,4 +346,21 @@ void listener_run(Listener *sl) {
 
 	}
 
+}
+
+void listener_register_close_callback(Listener *l, int fd, void (*callback)(void*), void* argument) {
+	int i;
+	pthread_mutex_lock(&l->clients_lock);
+
+	for (i = 0; i < LISTENER_MAX_SERVERS; i++) {
+		if (l->pf[i].fd == fd) {
+
+			l->close_callback[i] = callback;
+			l->opaque[i] = argument;
+
+			i = LISTENER_MAX_SERVERS;
+		}
+	}
+
+	pthread_mutex_unlock(&l->clients_lock);
 }

@@ -56,6 +56,16 @@ void events_sender_mouse_move(EventsSender *es, int x, int y) {
 	es->positionMouseY = y;
 }
 
+void event_sender_keyboard_event(EventsSender *es, int key) {
+
+	XTestFakeKeyEvent(es->display, XKeysymToKeycode(es->display, key), 1, 0);
+	int result = XTestFakeKeyEvent(es->display, XKeysymToKeycode(es->display, key), 0, 0);
+	XFlush(es->display);
+	
+	fprintf(stderr, "result = %d\n", result);
+
+}
+
 
 void __events_sender_tester(void) {
 

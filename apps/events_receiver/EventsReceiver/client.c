@@ -65,14 +65,33 @@ inline static void _decode_internal_message(Message *msg, const char *txt) {
 
 	char *ptr = NULL;
 
-	ptr = strtok(txt, ";");
-	msg->x = atof(ptr);
+	if (strstr(txt, "key:") == NULL) {
 
-	ptr = strtok(NULL, ";");
-	msg->y = atof(ptr);
+		msg->type = ACCELEROMETER;
 
-	ptr = strtok(NULL, ";");
-	msg->z = atof(ptr);
+		ptr = strtok(txt, ";");
+		msg->x = atof(ptr);
+
+		ptr = strtok(NULL, ";");
+		msg->y = atof(ptr);
+
+		ptr = strtok(NULL, ";");
+		msg->z = atof(ptr);
+
+	} else {
+
+		ptr = strtok(txt, ":");
+		ptr = strtok(NULL, ":");
+
+		if (!strcmp(ptr, "up")) {
+			msg->type = VOLUME_UP;
+		} else if (!strcmp(ptr, "down")) {
+			msg->type = VOLUME_DOWN;
+		} else {
+			msg->type = INVALID;
+		}
+
+	}
 
 }
 
@@ -83,10 +102,14 @@ inline static Message* _decode_message(char *msgtxt) {
 	JsonParser *parser;
 	JsonReader *reader;
 	char *cpy;
-	Message *msg;
+	Message *msg = NULL;
 
 	parser = json_parser_new();
-	json_parser_load_from_data(parser, msgtxt, -1, NULL);
+	
+	if (!json_parser_load_from_data(parser, msgtxt, -1, NULL)) {
+		fprintf(stderr, "Failed to parse message");
+		goto error;
+	}
 
 	reader = json_reader_new(json_parser_get_root(parser));
 
@@ -108,6 +131,7 @@ inline static Message* _decode_message(char *msgtxt) {
 	g_object_unref(reader);
 	g_object_unref(parser);
 
+error:
 	return msg;
 
 }
@@ -139,13 +163,16 @@ void client_main_loop(Client *cl, void (*callback)(Message *msg)) {
 
 			if (bytes_read > 0) {
 
+				cl->buffer[bytes_read] = 0;
+
 				fprintf(stderr, "Msg: %s\n", cl->buffer);
 
 				msg = _decode_message(cl->buffer);
 
-				callback(msg);
-
-				_free_msg(msg);
+				if (msg != NULL) {
+					callback(msg);
+					_free_msg(msg);
+				}
 			}
 
 		} else if (pr.revents != 0) {

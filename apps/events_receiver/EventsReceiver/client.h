@@ -17,10 +17,15 @@
 #include <json-glib/json-glib.h>
 #include <json-glib/json-gobject.h>
 
+#include <X11/keysymdef.h>
+
+enum KEY_TYPE { INVALID, ACCELEROMETER, VOLUME_UP, VOLUME_DOWN };
+
 typedef struct SMessage {
 
 	int from, to;
 	float x, y, z;
+	int type;
 
 } Message;
 

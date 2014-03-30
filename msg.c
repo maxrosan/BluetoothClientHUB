@@ -52,7 +52,7 @@ Message* msg_copy(Message *msg) {
 
 Message* msg_from_json(int from, const char *msgtxt) {
 
-	Message *ret;
+	Message *ret = NULL;
 	int to;
 	const char *txt;
 	JsonParser *parser;
@@ -60,7 +60,9 @@ Message* msg_from_json(int from, const char *msgtxt) {
 	char *cpy;
 
 	parser = json_parser_new();
-	json_parser_load_from_data(parser, msgtxt, -1, NULL);
+	if (!json_parser_load_from_data(parser, msgtxt, -1, NULL)) {
+		goto error;
+	}
 
 	reader = json_reader_new(json_parser_get_root(parser));
 
@@ -74,11 +76,13 @@ Message* msg_from_json(int from, const char *msgtxt) {
 
 	cpy = strdup(txt);
 
-	g_object_unref(reader);
-	g_object_unref(parser);
-
 	ret = msg_create_without_msg(from, to);
 	ret->msg = cpy;
+
+	g_object_unref(reader);
+
+error:	
+	g_object_unref(parser);	
 
 	return ret;
 }

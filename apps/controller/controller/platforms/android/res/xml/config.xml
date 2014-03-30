@@ -15,9 +15,10 @@
     <content src="index.html" />
     <preference name="fullscreen" value="true" />
     <preference name="webviewbounce" value="true" />
-
     <feature name="BluetoothClient">
         <param name="android-package" value="com.github.controller.BluetoothClient" />
     </feature>
-
+    <feature name="Accelerometer">
+        <param name="android-package" value="org.apache.cordova.devicemotion.AccelListener" />
+    </feature>
 </widget>
